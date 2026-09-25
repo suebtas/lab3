@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama",
+      "options": {
+        "baseURL": "http://host.docker.internal:11434/v1"
+      },
+      "models": {
+        "qwen2.5-coder:7b": {
+          "name": "qwen2.5-coder:7b",
+          "description": "แนะนำหลักสำหรับเขียนโค้ดและอ่าน Workspace"
+        },
+        "qwen3:8b": {
+          "name": "qwen3:8b",
+          "description": "โมเดลทั่วไปขนาด 8B"
+        },
+        "qwen2.5:7b": {
+          "name": "qwen2.5:7b",
+          "description": "โมเดลทั่วไปเวอร์ชันก่อนหน้า"
+        },
+        "gemma3:4b": {
+          "name": "gemma3:4b",
+          "description": "โมเดลขนาดเล็กน้ำหนักเบา"
+        }
+      }
+    }
+  }
+}

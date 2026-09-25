@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  opencode-env:
+    image: node:24-slim
+    container_name: opencode-workspace
+    working_dir: /workspace
+    # Mount โฟลเดอร์ปัจจุบัน เข้าไปใน Container ที่ /workspace
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    # อนุญาตให้ Container เรียกใช้งาน Ollama บนเครื่องโฮสต์ (Windows) ผ่าน host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # รักษาสถานะ Terminal ให้เปิดค้างไว้เพื่อพิมพ์โต้ตอบกับ OpenCode ได้
+    stdin_open: true
+    tty: true
+    # คำสั่งเริ่มต้นเมื่อเปิด Container ขึ้นมา (สามารถติดตั้ง OpenCode อัตโนมัติและค้างไว้ที่ Shell)
+    command: >
+      sh -c "npm install -g opencode-ai && exec sh"
