@@ -1,0 +1,8 @@
+# Normalize all text to LF on every platform (Windows, Linux, CI).
+# Prevents CRLF churn and protects binary asset files from line-ending
+# normalization which could corrupt them.
+* text=auto eol=lf
+
+# Binary assets must never be treated as text.
+*.ttf binary
+*.png binary

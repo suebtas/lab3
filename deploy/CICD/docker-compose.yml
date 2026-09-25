@@ -1,0 +1,46 @@
+# Local deployment for startup_hr Flutter Web.
+# Project name is fixed to lab3-cicd so it never clashes with the root
+# OpenCode compose project. Run with:
+#   docker compose --project-name lab3-cicd --env-file deploy/CICD/.env \
+#     -f deploy/CICD/docker-compose.yml up -d
+name: lab3-cicd
+
+services:
+  startup-hr-web:
+    image: startup-hr:local
+    build:
+      context: ../..
+      dockerfile: deploy/CICD/Dockerfile
+      target: runtime
+      # OCI labels as build args (defaults; CI/local override via env).
+      args:
+        LABEL_SOURCE: "${LABEL_SOURCE:-https://github.com/suebtas/lab3}"
+        LABEL_VERSION: "${LABEL_VERSION:-1.0.0}"
+        LABEL_REVISION: "${LABEL_REVISION:-unknown}"
+        LABEL_CREATED: "${LABEL_CREATED:-unknown}"
+      # BuildKit is required for the pinned foreign base images.
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      APP_PORT: "${APP_PORT:-8080}"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add: []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 12
+    deploy:
+      restart_policy:
+        condition: on-failure
+    # No host source or build/web mounts: static assets live in the image.
+    volumes: []

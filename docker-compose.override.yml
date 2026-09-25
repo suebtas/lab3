@@ -1,0 +1,13 @@
+services:
+  opencode-env:
+    image: lab3-opencode:local
+    build:
+      context: .
+      dockerfile: .opencode/Dockerfile
+    environment:
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    command: ["sh"]

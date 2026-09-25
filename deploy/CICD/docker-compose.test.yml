@@ -1,0 +1,29 @@
+name: lab3-cicd
+
+services:
+  # Local/CI-only overlay: opens the real runtime image in a real browser.
+  # Never part of a production deployment.
+  browser-test:
+    build:
+      context: ../..
+      dockerfile: deploy/CICD/browser-tests/Dockerfile
+    image: startup-hr-browser-tests:local
+    init: true
+    shm_size: '1gb'
+    environment:
+      - BASE_URL=http://startup-hr-web:8080
+      - CI=true
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    depends_on:
+      startup-hr-web:
+        condition: service_healthy
+    networks:
+      default: {}
+    volumes:
+      # Persist Playwright artifacts to the repo's git-ignored paths so CI can
+      # upload screenshot/trace/report on success or failure (§17.1/§17.4).
+      - ./browser-tests/test-results:/app/test-results
+      - ./browser-tests/playwright-report:/app/playwright-report
+    deploy:
+      restart_policy:
+        condition: none

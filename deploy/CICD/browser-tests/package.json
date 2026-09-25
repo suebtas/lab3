@@ -1,0 +1,16 @@
+{
+  "name": "startup-hr-browser-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright browser smoke tests for startup_hr Flutter Web (Compose network)",
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "show-report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.0"
+  },
+  "license": "UNLICENSED"
+}

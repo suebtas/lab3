@@ -1,0 +1,48 @@
+# Docker build context ignore for deploy/CICD/Dockerfile
+# Context root is the repository root; this file sits next to the Dockerfile.
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# Flutter/Dart build and dependency state
+.dart_tool/
+build/
+.idea/
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Deploy-local settings that must never enter an image or build context
+deploy/CICD/.env
+
+# Secrets and credentials
+**/.env
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+id_rsa*
+id_ed25519*
+
+# Playwright browser-test harness runtime state
+deploy/CICD/browser-tests/node_modules/
+deploy/CICD/browser-tests/test-results/
+deploy/CICD/browser-tests/playwright-report/
+
+# Session transcripts and large local notes
+session-*.md
+lab3.md
+
+# OpenCode dev-runner files (not part of the web app)
+.opencode/
+
+# CI workflow data
+.github/
+
+# OS/editor cruft and logs
+**/.DS_Store
+**/*.log
+**/node_modules/
+tmp/

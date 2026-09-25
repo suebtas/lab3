@@ -1,0 +1,28 @@
+# Flutter/Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Deploy-local settings
+deploy/CICD/.env
+
+# Browser test harness runtime state
+deploy/CICD/browser-tests/node_modules/
+deploy/CICD/browser-tests/test-results/
+deploy/CICD/browser-tests/playwright-report/
+
+# Session transcripts and local notes (not part of the app or deployment)
+session-*.md
+lab3.md
+
+# OpenCode/Chromium browser-check debug artifacts
+.browser-check/
+
+# Misc
+*.log

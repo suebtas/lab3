@@ -1,0 +1,38 @@
+# Production deployment reference for startup_hr Flutter Web.
+# References a published image via IMAGE_REF ONLY (immutable tag or digest).
+# There is NO `build:` and NO application/source volume - the published image
+# is the single release candidate. Discourages falling back to `latest`.
+#
+#   IMAGE_REF=ghcr.io/suebtas/lab3@sha256:<full-digest> docker compose \
+#     --env-file deploy/CICD/.env \
+#     -f deploy/CICD/docker-compose.production.yml up -d
+name: lab3-cicd
+
+services:
+  startup-hr-web:
+    image: ${IMAGE_REF:?IMAGE_REF must be set to an immutable image reference (tag or digest)}
+    pull_policy: always
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      APP_PORT: "${APP_PORT:-8080}"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add: []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 12
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes: []
