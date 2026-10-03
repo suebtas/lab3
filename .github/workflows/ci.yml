@@ -1,4 +1,4 @@
-name: CI
+name: CI and Delivery
 
 on:
   push:
@@ -116,6 +116,25 @@ jobs:
             -f deploy/CICD/docker-compose.yml -f deploy/CICD/docker-compose.test.yml \
             run --rm browser-test
 
+      # Export the exact image that passed every gate. The delivery job loads
+      # this artifact instead of rebuilding from source.
+      - name: Export tested runtime image for delivery
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p /tmp/runtime-image
+          docker save startup-hr:local | gzip -1 > /tmp/runtime-image/startup-hr.tar.gz
+          (cd /tmp/runtime-image && sha256sum startup-hr.tar.gz > startup-hr.tar.gz.sha256)
+
+      - name: Upload tested runtime image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: runtime-image-${{ github.sha }}
+          path: /tmp/runtime-image/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Upload Playwright artifacts (report, trace, screenshots)
         if: always()
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
@@ -147,3 +166,56 @@ jobs:
           docker compose --project-name lab3-cicd --env-file deploy/CICD/.env.example \
             -f deploy/CICD/docker-compose.yml -f deploy/CICD/docker-compose.test.yml \
             down --remove-orphans || true
+
+  publish:
+    name: Publish tested image to GHCR
+    needs: quality-build-and-smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - name: Download tested runtime image
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: runtime-image-${{ github.sha }}
+          path: runtime-image
+
+      - name: Verify artifact and image revision
+        run: |
+          (cd runtime-image && sha256sum -c startup-hr.tar.gz.sha256)
+          gzip -dc runtime-image/startup-hr.tar.gz | docker load
+          test "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' startup-hr:local)" = "${GITHUB_SHA}"
+          IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> "$GITHUB_ENV"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish immutable SHA tag and main alias
+        id: publish
+        run: |
+          docker tag startup-hr:local "$IMAGE_NAME:$GITHUB_SHA"
+          docker tag startup-hr:local "$IMAGE_NAME:main"
+          docker push "$IMAGE_NAME:$GITHUB_SHA"
+          docker push "$IMAGE_NAME:main"
+          DIGEST_REF=$(docker image inspect "$IMAGE_NAME:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          test -n "$DIGEST_REF"
+          echo "digest_ref=$DIGEST_REF" >> "$GITHUB_OUTPUT"
+          {
+            echo '## Published runtime image'
+            echo
+            echo "- Immutable tag: \`$IMAGE_NAME:$GITHUB_SHA\`"
+            echo "- Deployment reference: \`$DIGEST_REF\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log out of GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io || true

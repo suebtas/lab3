@@ -21,4 +21,4 @@ COPY deploy/CICD/browser-tests/ ./
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-CMD ["npx", "playwright", "test", "--reporter=list"]
+CMD ["npx", "playwright", "test"]

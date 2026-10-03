@@ -119,7 +119,22 @@ CanvasKit from the locally-shipped `canvaskit/` directory and the Roboto /
 Noto Sans Thai fonts are bundled as app assets (see `pubspec.yaml`). The
 container does not contact `gstatic.com` or any CDN.
 
-## Production (image promotion, no push)
+## Continuous Delivery and production image
+
+After a human pushes to `main`, `.github/workflows/ci.yml` runs every quality,
+container, HTTP and browser gate. Only after all gates pass, the isolated
+`publish` job downloads the exact tested image (it does not rebuild), verifies
+its checksum and OCI revision label, and publishes:
+
+- `ghcr.io/suebtas/lab3:<full-commit-sha>` - immutable release identifier
+- `ghcr.io/suebtas/lab3:main` - convenient moving alias; never a deployment pin
+
+The workflow uses the repository-scoped `GITHUB_TOKEN` with `packages: write`
+only in the publish job. No PAT, SSH private key or registry password belongs
+in the repository. Find the immutable `image@sha256:...` deployment reference
+in the publish job summary.
+
+Deploy a published image by digest:
 
 ```bash
 export IMAGE_REF=ghcr.io/suebtas/lab3@sha256:<published-digest>
@@ -128,7 +143,9 @@ docker compose --env-file deploy/CICD/.env \
 ```
 
 The production compose references a published image only - no `build:` and no
-source/build mounts.
+source/build mounts. If the GHCR package is private, authenticate the target
+host to GHCR before pulling it. External-server rollout is intentionally not
+automatic until a target host, approval gate and rollback owner are defined.
 
 ## Offline transfer of the portable image
 

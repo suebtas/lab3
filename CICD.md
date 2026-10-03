@@ -30,11 +30,11 @@
 | Flutter Web scaffold | มีโฟลเดอร์ `web/` และ `.metadata` แล้ว | ต้องรักษา scaffold และเพิ่ม custom bootstrap ได้เมื่อจำเป็นต่อ browser runtime |
 | Root Compose | service `opencode-env` ใช้ `node:24-slim`, mount โปรเจกต์ที่ `/workspace` และติดตั้ง `opencode-ai` | ไม่ใช่ runtime ของ Flutter Web และห้ามแก้หรือใช้แทน Compose ใหม่ |
 | Deploy directory | มี portable-image, Nginx และ Compose artifacts ภายใต้ `deploy/CICD/` แล้ว | ให้ปรับปรุงและตรวจซ้ำตามเอกสารนี้ ห้ามย้ายกลับไป root Compose |
-| Git working tree | พาธปัจจุบันไม่ใช่ Git working tree และไม่พบ `.git` | ยังยืนยัน branch, commit และ remote จาก local Git ไม่ได้ |
-| GitHub repository | ระบุเป้าหมายเป็น `https://github.com/suebtas/lab3` แต่ไม่สามารถยืนยันเนื้อหาจาก public access ได้ | ต้องยืนยันว่า repository มีอยู่และบัญชีที่ใช้งานมีสิทธิ์ ก่อนเชื่อม local project หรือสร้าง workflow |
+| Git working tree | ยืนยันแล้วว่าเป็น branch `main` และมี remote `origin` ชี้ไป `https://github.com/suebtas/lab3.git` | ใช้ Git history เป็นแหล่งอ้างอิง revision และให้มนุษย์เป็นผู้ push |
+| GitHub repository | ยืนยัน repository และ GitHub Actions แล้ว; CI run ของ revision ที่อยู่บน `main` ผ่านสำเร็จ | อนุญาตให้เพิ่ม delivery job เพื่อ publish image ไป GHCR หลัง CI ผ่าน |
 | Flutter toolchain | ใช้ pinned Flutter builder image ผ่าน Docker ได้ | local host ไม่จำเป็นต้องติดตั้ง Flutter แต่เวอร์ชัน package และ builder image ต้องสอดคล้องกัน |
 
-ห้ามถือว่า local project และ `suebtas/lab3` เป็น code revision เดียวกันจนกว่าจะยืนยันด้วย Git remote และ commit history ได้
+ก่อน publish ทุกครั้งต้องยืนยันว่า workflow ทำงานกับ commit SHA เดียวกับ revision ที่มนุษย์ push เข้า `suebtas/lab3`
 
 ## 3. สถาปัตยกรรมที่แนะนำ
 
@@ -100,7 +100,7 @@
 - `browser-tests/` — test harness ที่เปิด browser จริง เก็บ console, page errors, failed requests, screenshot และ trace
 - `web/flutter_bootstrap.js` — ใช้เมื่อจำเป็นต้องกำหนด Flutter loader เช่น `canvasKitBaseUrl` ให้โหลด asset ภายใน image
 
-ไฟล์ `.github/workflows/release.yml` เป็น deliverable ของระยะ publish/CD หลังยืนยัน repository, registry และ approval policy แล้ว ไม่ให้สร้างหรือเปิดใช้งานในรอบ local implementation ปัจจุบัน
+ใช้ publish job ภายใน `.github/workflows/ci.yml` เพื่อส่งต่อ image artifact จาก CI run เดียวกันโดยไม่ rebuild จึงไม่ต้องมี `.github/workflows/release.yml` แยกต่างหาก
 
 เนื่องจาก Docker build context ต้องครอบคลุม Flutter source ที่ root ให้ Compose กำหนดค่าตามแนวคิดนี้:
 
@@ -220,6 +220,9 @@ implementation ถือว่าผ่านเมื่อครบทุก�
 13. หยุดและลบ build container แล้ว runtime image ยังรันได้โดยไม่ mount `lib/`, `web/` หรือ `build/web` จาก host
 14. `docker save startup-hr:local` สำเร็จ หรือมีหลักฐานเทียบเท่าว่า image export ได้
 15. production Compose ผ่าน structural/config validation เมื่อกำหนด `IMAGE_REF` และไม่มี `build:` หรือ application volume
+16. workflow ส่งต่อ image ที่ผ่านทุก gate ไป publish job ด้วย artifact และ checksum โดยไม่ rebuild
+17. publish job ทำงานเฉพาะ trusted push เข้า `main`, ใช้ `packages: write` เฉพาะ job นี้ และเผยแพร่ full commit SHA โดยไม่ใช้ `latest`
+18. หลัง human push ต้องมี GitHub Actions run ที่ผ่านและบันทึก `ghcr.io/suebtas/lab3@sha256:<digest>`; ก่อนรันจริงให้รายงานข้อนี้เป็น `NOT RUN`
 
 HTTP 200, container `healthy` หรือการพบ static assets เพียงอย่างเดียวไม่ใช่หลักฐานว่า UI render สำเร็จ หาก browser test ไม่ได้รันให้ข้อ 6–10 เป็น `NOT RUN`; ห้ามเปลี่ยนเป็น `PASS` จาก HTTP smoke test
 
@@ -248,10 +251,12 @@ HTTP 200, container `healthy` หรือการพบ static assets เพ�
 ### การแยก CI และ CD
 
 - **CI** ครอบคลุม dependency restore, analyze, tests, Flutter Web build, Docker build, HTTP smoke test และ automated browser smoke test
-- **CD ระยะแรก** หมายถึงการสร้าง portable image, tag ด้วย commit SHA และเตรียม production Compose โดยยังไม่ push
-- **CD ระยะ publish** ต้อง push image ที่ผ่าน CI แล้วไปยัง registry โดยไม่ rebuild พร้อมบันทึก digest และใช้ digest เดิมใน deployment
-- ยังไม่อนุญาตให้ Deploy ไป production server เพราะยังไม่ได้กำหนด target environment, registry, versioning/tag policy, approval gate, rollback และผู้รับผิดชอบ
-- หากเลือก GitHub Container Registry ในภายหลัง ให้ job สำหรับ publish ทำงานเฉพาะ trusted branch/tag ใช้ `packages: write`, ไม่ทำงานกับ untrusted pull request และใช้ GitHub environment approval เมื่อเหมาะสม
+- **CD ระยะ publish** ทำงานเฉพาะ `push` เข้า `main` หลัง CI ผ่าน โดยส่ง image เดียวกับที่ผ่าน browser test เป็น artifact ไปยัง publish job และห้าม rebuild
+- registry ที่อนุมัติคือ GitHub Container Registry ชื่อ `ghcr.io/suebtas/lab3`
+- publish ทั้ง immutable tag `<full-commit-sha>` และ moving alias `main`; deployment ต้องอ้างอิง registry digest และห้ามใช้ `latest`
+- publish job เท่านั้นที่ได้รับ `packages: write`; CI/PR job คง `contents: read` และ untrusted pull request ต้องไม่ publish
+- ใช้ repository-scoped `GITHUB_TOKEN` จาก GitHub Actions โดยไม่ใช้ PAT, SSH key หรือ credential ที่ commit ลง repository
+- ยังไม่อนุญาตให้ Deploy ไป production server เพราะยังไม่ได้กำหนด target host, approval gate, rollback owner และ credential mechanism ของเครื่องปลายทาง
 
 ## 9. Secrets, credentials และ supply-chain security
 
@@ -324,25 +329,24 @@ Assumptions ปัจจุบัน:
 | Deployment target | Localhost ด้วย Docker Compose เท่านั้น |
 | Runtime | Nginx แบบ unprivileged |
 | Compose project | `lab3-cicd` |
-| Docker image publishing | ยังไม่อนุญาต |
-| Production/external deployment | ยังไม่อนุญาต |
+| Docker image publishing | อนุญาตให้ GitHub Actions publish ไป `ghcr.io/suebtas/lab3` หลัง trusted push เข้า `main` และ CI ผ่านเท่านั้น |
+| Production/external deployment | production Compose โดย digest อนุญาต; การ rollout ไป server ภายนอกยังไม่อนุญาตจนกว่าจะระบุ target |
 | Portable artifact | ต้องสร้าง `startup-hr:local` ที่ export และรันบนเครื่องอื่นได้ |
-| SSH | ห้ามสร้าง ตรวจ หรือใช้งานในรอบนี้ |
-| Git operations | ห้าม `git init`, เพิ่ม remote, commit หรือ push ในรอบนี้ |
-| GitHub Actions | อนุญาตให้สร้าง workflow file แต่ยังไม่ถือว่าผ่านจนกว่าจะรันบน GitHub จริง |
+| SSH | ไม่ใช้ SSH ใน workflow; key บน Windows host อยู่ภายใต้การควบคุมของผู้ใช้และห้าม Agent อ่าน private key |
+| Git operations | Agent อนุญาตให้ตรวจ diff และสร้าง local commit; ผู้ใช้เป็นผู้ `push`/`pull` จาก Windows เท่านั้น |
+| GitHub Actions | CI ล่าสุดผ่านแล้ว; อนุญาตให้เพิ่ม publish job และจะถือว่า CD ผ่านเมื่อ run หลัง human push สำเร็จและมี GHCR digest |
 | Browser automation | อนุญาตให้สร้าง Playwright test container และ test artifacts โดยต้องแยกจาก production runtime |
 | Browser test target | ใช้ `http://startup-hr-web:8080` ภายใน Compose network; host browser ใช้ `http://localhost:${APP_PORT:-8080}` |
 | Browser security | ห้ามใช้ `--disable-web-security`, wildcard CSP, ignore HTTPS errors หรือ suppress console errors เพื่อทำให้ test ผ่าน |
 | Application source | ห้ามแก้ `lib/` และ `test/` เพื่อทำให้ deployment หรือ tests ผ่าน |
 
-รายการที่ยังไม่ยืนยันและต้องไม่ถูกสมมติเพื่อทำ external deployment:
+รายการที่ยังไม่ยืนยันและต้องไม่ถูกสมมติเพื่อทำ external-server deployment:
 
-1. สถานะและสิทธิ์ของ repository `https://github.com/suebtas/lab3`
-2. default branch ที่แท้จริง; workflow ใช้ `main` เป็น assumption ได้และต้องรายงานไว้
-3. container registry, image naming และ tag policy สำหรับการเผยแพร่
-4. production platform, approval process, rollback และผู้รับผิดชอบ
-5. backend API, authentication, environment-specific configuration และข้อมูลจริงที่ต้องคุ้มครอง
-6. Flutter version ให้ตรวจจาก environment ที่ใช้งานจริง แล้วใช้เวอร์ชันเดียวกันใน local build, Docker builder และ CI; ห้ามแต่งเวอร์ชันหรือ digest ที่ไม่ได้ตรวจสอบ
+1. production host/platform, network endpoint และผู้รับผิดชอบ
+2. environment approval process, target-host credential mechanism และ rollback owner
+3. GHCR package visibility; หากเป็น private เครื่องปลายทางต้อง login ด้วย read-only credential ที่จัดการนอก repository
+4. backend API, authentication, environment-specific configuration และข้อมูลจริงที่ต้องคุ้มครอง
+5. Flutter version ต้องเป็นเวอร์ชันเดียวกันใน local build, Docker builder และ CI; ห้ามแต่งเวอร์ชันหรือ digest ที่ไม่ได้ตรวจสอบ
 
 ## 14. ลำดับการดำเนินงานระยะถัดไป
 
@@ -355,9 +359,10 @@ Assumptions ปัจจุบัน:
 5. เพิ่ม Playwright browser-test service แล้วตรวจ UI render, console, page errors, failed requests และ route refresh
 6. ตรวจ image contents และ portability ด้วย export test
 7. สร้างหรือปรับ GitHub Actions CI ให้ใช้ browser test เดียวกับ local หลัง local browser flow ผ่านแล้ว
-8. เชื่อม local project กับ Git repository ที่ถูกต้องโดยไม่เขียนทับงานเดิม หลังได้รับอนุญาตแยกต่างหาก
-9. เพิ่ม image publishing หรือ external deployment เฉพาะเมื่อกำหนด CD target และ security controls ครบถ้วน
-10. จัดทำหลักฐานผลทดสอบและตรวจ acceptance criteria ทุกข้อก่อนประกาศพร้อมใช้งาน
+8. export image ที่ผ่านทุก gate เป็น workflow artifact พร้อม checksum แล้วให้ publish job ตรวจ checksum และ OCI revision
+9. publish ไป GHCR ด้วย full commit SHA และ `main` alias โดยไม่ rebuild พร้อมบันทึก digest ใน job summary
+10. ให้ผู้ใช้ push จาก Windows แล้วตรวจ GitHub Actions run และ GHCR digest; external rollout รอ target ที่ระบุชัดเจน
+11. จัดทำหลักฐานผลทดสอบและตรวจ acceptance criteria ทุกข้อก่อนประกาศพร้อมใช้งาน
 
 ## 15. Execution contract สำหรับ Agent
 
@@ -426,7 +431,9 @@ Flutter SDK บน OpenCode container ไม่ใช่ prerequisite หาก 
 
 ### 15.4 Terminal state ของรอบนี้
 
-รอบ implementation นี้ถือว่าสำเร็จเมื่อ portable runtime image ผ่าน quality gates, image inspection, export test, HTTP checks และ automated browser acceptance criteria พร้อมทำงานที่ `http://localhost:8080` รวมทั้งมี local Compose, browser-test Compose, production Compose และ CI workflow ที่ตรวจสอบแล้ว การ push repository, publish image, GitHub Actions run และ external production deployment เป็นงานระยะถัดไปและต้องได้รับอนุญาตแยกต่างหาก
+รอบ implementation ในเครื่องถือว่าสำเร็จเมื่อ portable runtime image ผ่าน quality gates, image inspection, export test, HTTP checks และ automated browser acceptance criteria พร้อมทำงานที่ `http://localhost:8080` รวมทั้ง workflow syntax และ production Compose ผ่านการตรวจสอบ หลังจากนั้น Agent สร้าง local commit และหยุดก่อน push
+
+รอบ CD ถือว่าสำเร็จเมื่อผู้ใช้ push local commit จาก Windows, GitHub Actions ผ่านทั้ง `quality-build-and-smoke` และ `publish`, GHCR มี tag ที่ตรงกับ full commit SHA และ job summary บันทึก digest ที่นำไปใช้กับ production Compose ได้ การ rollout ไป server ภายนอกไม่ใช่ terminal state รอบนี้
 
 ## 16. Portable image promotion และ Production Deployment
 
@@ -456,7 +463,7 @@ Docker image ที่ผ่าน CI เป็น release candidate เพี�
 
 ### 16.4 ขอบเขตรอบปัจจุบัน
 
-รอบนี้อนุญาตให้สร้างและพิสูจน์ portable image, production Compose และ CI configuration เท่านั้น ยังห้าม login registry, push image, สร้าง release, แก้ GitHub หรือ deploy ไป external environment จนกว่าจะได้รับอนุญาตแยกต่างหาก
+รอบนี้อนุญาตให้ GitHub Actions login และ push เฉพาะ `ghcr.io/suebtas/lab3` ด้วย `GITHUB_TOKEN` ใน publish job หลัง trusted push เข้า `main` และทุก CI gate ผ่าน ห้าม Agent login/push registry จากเครื่อง local และห้าม deploy ไป external environment จนกว่าจะระบุ target และได้รับอนุญาตแยกต่างหาก
 
 ## 17. Automated Browser Validation และ Debug Loop
 
@@ -531,11 +538,13 @@ Browser test ต้องลงทะเบียน event listeners ก่อ�
 
 เมื่อพบ failure ให้แก้เฉพาะ root cause ภายใน allowed files แล้ว rebuild/retest ได้ไม่เกิน 5 รอบ ห้ามลด security, ใช้ wildcard CSP, disable web security, suppress errors หรือแก้ business logic/tests เพื่อฝืนให้ผ่าน
 
-ห้าม Git init/commit/push, SSH, GitHub mutation, registry login/push, image publish หรือ external deployment เว้นแต่ได้รับอนุญาตในคำสั่งแยกต่างหาก
+Agent ทำ local commit ได้เมื่อ validation ผ่าน แต่ห้าม push/pull และห้ามอ่านหรือใช้ SSH private key; ผู้ใช้เป็นผู้ push จาก Windows แบบ human-in-the-loop
+
+กำหนด CD ให้ trusted push เข้า main ส่ง image เดียวกับที่ผ่าน tests ไป publish ที่ ghcr.io/suebtas/lab3 โดยไม่ rebuild ใช้ full commit SHA และ main alias ห้าม latest จำกัด packages: write ไว้เฉพาะ publish job และบันทึก digest ใน job summary ห้าม Agent login/push registry จาก local และห้าม external-server deployment
 
 จบงานโดยปล่อยเฉพาะ application service ทำงานอยู่เมื่อ terminal state ผ่านครบ หากไม่ผ่านให้ cleanup test resources และรายงาน blocker ตามหลักฐานจริง
 
 รายงานไฟล์ที่เปลี่ยน, commands/exit codes, test counts, image identity/size, container security/health, HTTP results, browser results/errors, artifact paths, root Compose hash ก่อน/หลัง และทุก acceptance criterion เป็น PASS/FAIL/NOT RUN
 ```
 
-หาก session ต้องทำเฉพาะการตรวจโดยไม่แก้ไฟล์ ให้เพิ่มบรรทัดแรกว่า `โหมด review-only: ห้ามแก้ไฟล์และห้ามเปลี่ยน runtime state` หากต้องการอนุญาต Git, publish หรือ external deployment ต้องใช้ Prompt แยกและระบุ target, credential mechanism, approval gate และ rollback policy อย่างชัดเจน; ห้ามตีความ Standard Prompt นี้ว่าอนุญาตงานดังกล่าว
+หาก session ต้องทำเฉพาะการตรวจโดยไม่แก้ไฟล์ ให้เพิ่มบรรทัดแรกว่า `โหมด review-only: ห้ามแก้ไฟล์และห้ามเปลี่ยน runtime state` การ publish ที่อนุญาตหมายถึง GitHub Actions → GHCR ตามเงื่อนไขข้างต้นเท่านั้น; external deployment ต้องใช้ Prompt แยกและระบุ target, credential mechanism, approval gate และ rollback policy อย่างชัดเจน
