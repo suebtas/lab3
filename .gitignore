@@ -19,7 +19,6 @@ deploy/CICD/browser-tests/playwright-report/
 
 # Session transcripts and local notes (not part of the app or deployment)
 session-*.md
-lab3.md
 
 # OpenCode/Chromium browser-check debug artifacts
 .browser-check/
